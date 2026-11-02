@@ -16,22 +16,26 @@ directamente, y a la API le habla el frontend.
 
 ### Autenticación en MongoDB: El uso de `authSource`
 
-Al inicializar la imagen de MongoDB mediante variables de entorno, el usuario administrador generado reside exclusivamente en la base de datos interna denominada `admin`[cite: 3]. 
+Al inicializar la imagen de MongoDB mediante variables de entorno, el usuario administrador generado reside exclusivamente en la base de datos interna denominada `admin`. 
 
 Este comportamiento por diseño define cómo deben construirse las cadenas de conexión:
-*   **Sin el parámetro `?authSource=admin`:** El motor asume que el usuario existe en la base de datos de destino (la de la aplicación). Al no encontrarlo allí, deniega el acceso e informa un fallo de autenticación[cite: 3].
-*   **Con el parámetro `?authSource=admin`:** Se instruye explícitamente al motor para que valide las credenciales contra la base `admin`, permitiendo una autenticación exitosa independientemente de la base de datos a la que se acceda[cite: 3].
+*   **Sin el parámetro `?authSource=admin`:** El motor asume que el usuario existe en la base de datos de destino (la de la aplicación). Al no encontrarlo allí, deniega el acceso e informa un fallo de autenticación.
+*   **Con el parámetro `?authSource=admin`:** Se instruye explícitamente al motor para que valide las credenciales contra la base `admin`, permitiendo una autenticación exitosa independientemente de la base de datos a la que se acceda.
 
-**Impacto en la arquitectura:** Todas las conexiones futuras que realice la API hacia el motor de base de datos deberán incluir este parámetro en su URI para operar correctamente[cite: 3].
+**Impacto en la arquitectura:** Todas las conexiones futuras que realice la API hacia el motor de base de datos deberán incluir este parámetro en su URI para operar correctamente.
 
 ### Configuración del Frontend: El filtro envsubst (Punto 6)
 
-La variable `NGINX_ENVSUBST_FILTER=^API_` no es opcional[cite: 1]. Sin ella, la sustitución alcanza también a las variables propias de nginx (como `$uri`, `$host`, `$proxy_add_x_forwarded_for`), que quedan vacías y generan una configuración inválida en silencio, sin emitir errores en los registros[cite: 1, 171].
+La variable `NGINX_ENVSUBST_FILTER=^API_` no es opcional. Sin ella, la sustitución alcanza también a las variables propias de nginx (como `$uri`, `$host`, `$proxy_add_x_forwarded_for`), que quedan vacías y generan una configuración inválida en silencio, sin emitir errores en los registros.
 
 ### Mediciones y Optimizaciones (Punto 8)
 
 | Versión | Tamaño | Imagen Base | % de Reducción | Decisión Técnica que lo aportó |
 | :--- | :--- | :--- | :--- | :--- |
-| API (Ingenua) | 1.72 GB | `python:3.12` | 0% | Ninguna, imagen base completa y sin multi-etapa[cite: 4]. |
-| API (Definitiva) | 247 MB | `python:3.12-slim` | ~85% | Base mínima (`-slim`) y multi-etapa aislando dependencias[cite: 4]. |
-| Frontend (Definitivo) | 73.9 MB | `nginxinc/nginx-unprivileged:1.27-alpine` | ~95% | Multi-etapa fuerte: solo cruza la carpeta `dist/`, dejando Node afuera[cite: 4]. |
+| API (Ingenua) | 1.72 GB | `python:3.12` | 0% | Ninguna, imagen base completa y sin multi-etapa. |
+| API (Definitiva) | 247 MB | `python:3.12-slim` | ~85% | Base mínima (`-slim`) y multi-etapa aislando dependencias. |
+| Frontend (Definitivo) | 73.9 MB | `nginxinc/nginx-unprivileged:1.27-alpine` | ~95% | Multi-etapa fuerte: solo cruza la carpeta `dist/`, dejando Node afuera. |
+
+### Justificación arquitectónica: Ausencia de publicación de puertos en la base de datos
+
+La omisión del parámetro -p al instanciar catalogo-db obedece a un principio de seguridad por aislamiento de red. En esta arquitectura de tres capas, la base de datos representa el nivel más interno y sensible. Al no publicar sus puertos hacia el anfitrión (host), el servicio queda físicamente inaccesible desde el exterior. Esto fuerza un único flujo de comunicación válido: el frontend enruta las peticiones hacia la API, y exclusivamente la API tiene visibilidad de MongoDB utilizando la resolución de nombres del DNS interno que provee la red bridge custom (catalogo-net).
