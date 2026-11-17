@@ -58,3 +58,38 @@ El comando db.adminCommand('ping') empleado para verificar la salud del motor de
 ### Healthcheck de la API: Optimización de dependencias
 
 La verificación de estado del contenedor de la API se realiza delegando la solicitud HTTP a la biblioteca estándar urllib.request nativa del entorno de Python. Modificar el manifiesto de la imagen para instalar paquetes adicionales del sistema operativo, como la utilidad externa curl, contradice el patrón de construcción de imágenes optimizadas establecido en la segunda etapa del proyecto. Incorporar herramientas adicionales en la imagen exclusivamente para resolver un healthcheck incrementa el peso innecesario de la capa final y amplía la superficie de ataque del contenedor, introduciendo dependencias que los escáneres de vulnerabilidades deberán auditar.
+
+## Revisión de Seguridad
+
+| Servicio | Usuario de ejecución | Puertos publicados | Observaciones |
+|---|---|---|---|
+| `catalogo-frontend` | `uid=101(nginx)` | 3000 | Único punto de entrada expuesto. |
+| `catalogo-api` | `uid=1000(appuser)` | 8000 | Expuesto solo para depuración; en la iteración de orquestación pasará a ser interno. |
+| `catalogo-db` | `uid=999(mongodb)` | Ninguno | Servicio aislado lógicamente en la red bridge custom. |
+
+**Auditoría de Vulnerabilidades (Trivy) sobre `catalogo-api:v1`**
+- **Sistema base (Debian):** 211 vulnerabilidades detectadas (1 con parche disponible en *Fixed Version*).
+- **Dependencias de Python:** 18 vulnerabilidades detectadas (3 con parche disponible en *Fixed Version*).
+
+## Principio de Mínimo Privilegio
+
+La directiva `cap_drop: [ALL]` se aplicó exitosamente sobre los contenedores `catalogo-api` y `catalogo-frontend`. Dado que ambas imágenes fueron construidas para ejecutar sus procesos con usuarios no privilegiados (`appuser` y `nginx`), no requieren interactuar con recursos o rutinas protegidas del kernel.
+
+En contraste, el servicio `catalogo-db` finaliza con un error de permisos (`Operation not permitted`) al restringirle todas las *capabilities*. El motor de MongoDB inicia su proceso temporalmente como `root` para ajustar la propiedad y los permisos de su directorio de datos antes de transicionar al usuario interno del motor. Para garantizar este comportamiento sin otorgar privilegios absolutos, se aplicó una lista estricta mediante `cap_add`:
+- `CHOWN`, `SETUID`, `SETGID`: Permiten la transición de identidad del proceso.
+- `DAC_OVERRIDE`, `FOWNER`: Permiten manipular los permisos del volumen de datos anclado.
+
+## Comparativa: Docker Compose frente a ejecución manual
+
+La adopción del manifiesto `docker-compose.yml` introdujo las siguientes diferencias arquitectónicas respecto a los tres comandos `docker run` secuenciales:
+
+**Qué desapareció:**
+- La dependencia operativa de la memoria de quien ejecuta el despliegue para mantener el orden de arranque.
+- La inserción de credenciales y secretos en texto plano mediante banderas `-e` en el historial del shell.
+- La ejecución paralela ciega; los servicios ya no levantan hasta que su dependencia estricta reporta disponibilidad funcional.
+
+**Qué apareció:**
+- Una topología de red, almacenamiento y servicios declarada en un único manifiesto versionable.
+- Integración de `healthchecks` para verificar la salud interna de cada contenedor (ej. `db.adminCommand('ping').ok`).
+- La cláusula `depends_on` con condición `service_healthy`, que garantiza que la API no inicie sus rutinas de conexión hasta que MongoDB esté estructuralmente preparado para aceptarlas.
+- Interpolación segura de variables sensibles mediante un archivo `.env` excluido del control de versiones.
