@@ -1,0 +1,88 @@
+services:
+  catalogo-db:
+    image: mongo:7
+    container_name: catalogo-db
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${DB_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - catalogo-db-data:/data/db
+    networks:
+      - catalogo-net
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --eval \"db.adminCommand('ping').ok\" || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+      - FOWNER
+
+  catalogo-api:
+    image: catalogo-api:v1
+    build: 
+      context: ./backend
+    container_name: catalogo-api
+    ports:
+      - "8000:8000"
+    environment:
+      DB_HOST: catalogo-db
+      DB_PORT: 27017
+      DB_NAME: catalogodb
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      APP_VERSION: v1
+      ROOT_PATH: /api
+      SEED_DEMO: "true"
+    networks:
+      - catalogo-net
+    depends_on:
+      catalogo-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    cap_drop:
+      - ALL
+
+  catalogo-frontend:
+    image: catalogo-frontend:v1
+    build:
+      context: ./frontend
+    container_name: catalogo-frontend
+    ports:
+      - "3000:8080"
+    environment:
+      API_HOST: catalogo-api
+      API_PORT: 8000
+      NGINX_ENVSUBST_FILTER: ^API_
+    networks:
+      - catalogo-net
+    depends_on:
+      catalogo-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8080/healthz || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    cap_drop:
+      - ALL
+
+networks:
+  catalogo-net:
+    name: catalogo-net
+
+volumes:
+  catalogo-db-data:
+    name: catalogo-db-data

@@ -21,3 +21,5 @@ ENV API_HOST=catalogo-api \
 
 # Copiamos SOLO la carpeta dist/ generada en la etapa anterior
 COPY --from=builder /app/dist /usr/share/nginx/html
+
+COPY nginx/templates/default.conf.template /etc/nginx/templates/default.conf.template

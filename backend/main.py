@@ -39,7 +39,7 @@ APP_VERSION = os.environ.get("APP_VERSION", "v1")
 # Detrás del proxy del frontend la app vive bajo /api. FastAPI lo necesita para
 # generar bien las URLs absolutas de /docs y /openapi.json (ver README).
 # Se deja vacío para pegarle a la API directa por su puerto de depuración.
-ROOT_PATH = os.environ.get("ROOT_PATH", "/api")
+ROOT_PATH = os.environ.get("ROOT_PATH", "")
 
 SEED_DEMO = os.environ.get("SEED_DEMO", "true").lower() in ("1", "true", "yes")
 
