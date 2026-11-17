@@ -24,11 +24,11 @@ Este comportamiento por diseño define cómo deben construirse las cadenas de co
 
 **Impacto en la arquitectura:** Todas las conexiones futuras que realice la API hacia el motor de base de datos deberán incluir este parámetro en su URI para operar correctamente.
 
-### Configuración del Frontend: El filtro envsubst (Punto 6)
+### Configuración del Frontend: El filtro envsubst
 
 La variable `NGINX_ENVSUBST_FILTER=^API_` no es opcional. Sin ella, la sustitución alcanza también a las variables propias de nginx (como `$uri`, `$host`, `$proxy_add_x_forwarded_for`), que quedan vacías y generan una configuración inválida en silencio, sin emitir errores en los registros.
 
-### Mediciones y Optimizaciones (Punto 8)
+### Mediciones y Optimizaciones
 
 | Versión | Tamaño | Imagen Base | % de Reducción | Decisión Técnica que lo aportó |
 | :--- | :--- | :--- | :--- | :--- |
@@ -40,7 +40,7 @@ La variable `NGINX_ENVSUBST_FILTER=^API_` no es opcional. Sin ella, la sustituci
 
 La omisión del parámetro -p al instanciar catalogo-db obedece a un principio de seguridad por aislamiento de red. En esta arquitectura de tres capas, la base de datos representa el nivel más interno y sensible. Al no publicar sus puertos hacia el anfitrión (host), el servicio queda físicamente inaccesible desde el exterior. Esto fuerza un único flujo de comunicación válido: el frontend enruta las peticiones hacia la API, y exclusivamente la API tiene visibilidad de MongoDB utilizando la resolución de nombres del DNS interno que provee la red bridge custom (catalogo-net).
 
-### Secuencia de Arranque y Limitaciones Arquitectónicas (Punto 9)
+### Secuencia de Arranque y Limitaciones Arquitectónicas
 
 La arquitectura en contenedores sueltos impone un orden secuencial estricto de arranque: red → volumen → base → API → frontend. La alteración de esta cadena de dependencias provoca fallos críticos en la topología:
 1. Red (catalogo-net): Debe instanciarse primero. Sin ella, los contenedores fallarán al iniciar porque el motor no encontrará la interfaz bridge custom requerida para el aislamiento y resolución DNS.
@@ -50,3 +50,11 @@ La arquitectura en contenedores sueltos impone un orden secuencial estricto de a
 5. Frontend (catalogo-frontend): Su servidor Nginx evalúa y resuelve la directiva proxy_pass hacia el upstream (catalogo-api) una única vez durante el arranque. Si la API no está operativa en la red en ese instante exacto, la resolución DNS falla y el contenedor del frontend aborta fatalmente (Exited) sin política de reintentos.
 
 Limitación de diseño: Actualmente, la integridad de esta secuencia depende exclusivamente de la memoria operativa de quien ejecuta los comandos en la terminal. No existe ningún manifiesto ejecutable ni motor de estado deseado que audite o automatice estas dependencias. Esta carencia arquitectónica se resolverá la próxima semana delegando la topología y el orden de inicio (mediante depends_on) a la herramienta declarativa Docker Compose.
+
+### Healthcheck de MongoDB: Diagnóstico sin exposición de credenciales
+
+El comando db.adminCommand('ping') empleado para verificar la salud del motor de base de datos se ejecuta sin necesidad de autenticación previa. Esta característica de MongoDB ofrece una ventaja directa de seguridad en comparación con la variante relacional de este proyecto, ya que evita exponer la contraseña en texto plano dentro del propio comando del archivo Compose. Sin embargo, esta decisión de diseño implica que un estado saludable reportado por el healthcheck certifica exclusivamente que el motor se encuentra encendido y respondiendo a la operación de diagnóstico. Dicho estado no garantiza en absoluto que el usuario de la aplicación efectivamente exista, ni que la contraseña configurada en el entorno sea la correcta.
+
+### Healthcheck de la API: Optimización de dependencias
+
+La verificación de estado del contenedor de la API se realiza delegando la solicitud HTTP a la biblioteca estándar urllib.request nativa del entorno de Python. Modificar el manifiesto de la imagen para instalar paquetes adicionales del sistema operativo, como la utilidad externa curl, contradice el patrón de construcción de imágenes optimizadas establecido en la segunda etapa del proyecto. Incorporar herramientas adicionales en la imagen exclusivamente para resolver un healthcheck incrementa el peso innecesario de la capa final y amplía la superficie de ataque del contenedor, introduciendo dependencias que los escáneres de vulnerabilidades deberán auditar.
