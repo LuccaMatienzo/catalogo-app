@@ -102,3 +102,28 @@ El síntoma es idéntico porque `nginx` resuelve el destino de `proxy_pass` una 
 | :--- | :--- | :--- |
 | **Semana 3 (Docker)** | `host not found in upstream "catalogo-api"` | Faltaba la **red bridge custom** (`catalogo-net`); la red `bridge` por defecto no tiene DNS embebido. |
 | **Semana 5 (Kubernetes)** | `host not found in upstream "catalogo-api"` | El clúster ya tiene red y CoreDNS, pero falta el `Service` que registre el nombre `catalogo-api`. |
+
+## Cheatsheet - Semana 05
+
+| Comando | Qué hace en la práctica |
+| :--- | :--- |
+| `kubectl config current-context` | Muestra el contexto activo (clúster, usuario y namespace). Se ejecuta antes de aplicar cambios para confirmar que operás en el clúster correcto. |
+| `kubectl create namespace <nombre>` | Crea un espacio de nombres lógico para aislar los objetos del proyecto del resto del clúster. |
+| `kubectl config set-context --current --namespace=<ns>` | Fija el namespace por defecto en el contexto actual para evitar repetir `-n <ns>` en cada comando. |
+| `kubectl run <pod> --image=<img:tag> --dry-run=client -o yaml` | Genera el manifiesto YAML base de un Pod localmente sin enviarlo al API server, para guardarlo y editarlo de forma declarativa. |
+| `kubectl apply -f <archivo.yaml>` | Crea o actualiza recursos de forma declarativa e idempotente a partir de un manifiesto YAML. |
+| `kubectl get pods [-o wide] [-w]` | Lista los Pods del namespace con su estado y reinicios. `-o wide` suma IP y nodo; `-w` observa los cambios de estado en tiempo real. |
+| `kubectl describe pod <nombre>` | Muestra el detalle completo del objeto y su sección `Events`, clave para diagnosticar fallas previas al arranque del contenedor (como `ImagePullBackOff`). |
+| `kubectl logs <nombre> [--previous]` | Imprime la salida estándar y de error del contenedor. Con `--previous` recupera el registro de la instancia que acaba de fallar en un `CrashLoopBackOff`. |
+| `kubectl port-forward pod/<nombre> <local>:<pod>` | Abre un túnel temporal desde un puerto local hacia un Pod puntual; es una herramienta de depuración y muere al cortar la terminal o reiniciarse el Pod. |
+| `kubectl delete pod <nombre>` | Elimina el Pod del clúster. Al tratarse de un Pod suelto sin controlador, la baja es definitiva y no se recrea. |
+
+## Comparativa: `docker-compose.yml` (Semana 4) vs. Manifiestos de Pods (Semana 5)
+
+| Dimensión | Qué se conservó | Qué desapareció | Qué todavía falta (deudas de Semana 5) |
+| :--- | :--- | :--- | :--- |
+| **Imágenes y ejecución** | Las mismas tres imágenes (`mongo:7`, `catalogo-api:v1`, `catalogo-frontend:v1`), puertos internos (`27017`, `8000`, `8080`) y usuarios no-root. | El bloque `build:` (el clúster no compila; descarga las imágenes completas con usuario desde el registry) y `container_name:` (reemplazado por `metadata.name` en el `namespace`). | `Deployments` y `ReplicaSets` que garanticen autorreparación ante borrado de Pods, réplicas y *rolling updates* (Semana 6). |
+| **Red y descubrimiento** | Los mismos nombres lógicos en variables (`DB_HOST=catalogo-db`, `API_HOST=catalogo-api`). | La definición manual de `networks:` (`catalogo-net`) y la publicación directa de puertos al host (`ports: 3000:8080`, `8000:8000`). | `Services` (`ClusterIP` para DB/API y `NodePort` para frontend) que den DNS en CoreDNS, IP virtual estable frente a IPs efímeras y acceso externo sin `port-forward` (Semana 6). |
+| **Orden de arranque y salud** | Los reintentos de conexión internos de la API (`esperar_mongo()`). | `depends_on` (y `condition: service_healthy`), que no existe en Kubernetes. | `readinessProbe` y `livenessProbe` en reemplazo de `healthcheck`: hoy `Running` no garantiza que MongoDB esté listo para autenticar. |
+| **Configuración y secretos** | El mismo contrato de variables de entorno (incluido `ROOT_PATH=/api` y `SEED_DEMO=true`). | La interpolación local desde el archivo `.env`. | `ConfigMaps` y `Secrets` para sacar configuración y credenciales en texto plano de los manifiestos YAML (Semana 7). |
+| **Persistencia y seguridad** | El diseño sin estado de la API (imágenes almacenadas en MongoDB). | El volumen nombrado `catalogo-db-data` y el bloque `cap_drop` / `cap_add` de Compose. | `PersistentVolumeClaim` (PVC) para que los datos de MongoDB sobrevivan al Pod (Semana 7) y `securityContext` con `capabilities.drop: [ALL]` para mantener mínimo privilegio. |
