@@ -14,6 +14,12 @@ depuración) publicado)
 El frontend es el único punto de entrada: nadie le habla a la base
 directamente, y a la API le habla el frontend.
 
+## Service NodePort de depuración (`catalogo-api-nodeport`)
+
+Se creó el Service `catalogo-api-nodeport` de tipo `NodePort` (`30502 -> 8000`) apuntando al selector `app: catalogo-api` para verificar el backend directamente desde fuera del clúster mediante `curl -s http://<IP-del-nodo>:30502/health`.
+
+**Aclaración de arquitectura:** Este objeto existe exclusivamente con fines de depuración y pruebas del TP 6, por lo que **no formará parte del chart de Helm de la semana 8**. En operación normal, la API permanece expuesta únicamente de forma interna vía `ClusterIP`, siendo `catalogo-frontend` el único punto de entrada.
+
 ### Autenticación en MongoDB: El uso de `authSource`
 
 Al inicializar la imagen de MongoDB mediante variables de entorno, el usuario administrador generado reside exclusivamente en la base de datos interna denominada `admin`. 
