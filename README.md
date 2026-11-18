@@ -93,3 +93,12 @@ La adopción del manifiesto `docker-compose.yml` introdujo las siguientes difere
 - Integración de `healthchecks` para verificar la salud interna de cada contenedor (ej. `db.adminCommand('ping').ok`).
 - La cláusula `depends_on` con condición `service_healthy`, que garantiza que la API no inicie sus rutinas de conexión hasta que MongoDB esté estructuralmente preparado para aceptarlas.
 - Interpolación segura de variables sensibles mediante un archivo `.env` excluido del control de versiones.
+
+## Comparativa: Resolución DNS en Docker frente a Kubernetes
+
+El síntoma es idéntico porque `nginx` resuelve el destino de `proxy_pass` una única vez al arrancar y aborta si el nombre no existe (no reintenta). Lo que cambia es la causa arquitectónica:
+
+| Entrega | Error en logs | Causa raíz |
+| :--- | :--- | :--- |
+| **Semana 3 (Docker)** | `host not found in upstream "catalogo-api"` | Faltaba la **red bridge custom** (`catalogo-net`); la red `bridge` por defecto no tiene DNS embebido. |
+| **Semana 5 (Kubernetes)** | `host not found in upstream "catalogo-api"` | El clúster ya tiene red y CoreDNS, pero falta el `Service` que registre el nombre `catalogo-api`. |
