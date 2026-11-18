@@ -127,3 +127,19 @@ El síntoma es idéntico porque `nginx` resuelve el destino de `proxy_pass` una 
 | **Orden de arranque y salud** | Los reintentos de conexión internos de la API (`esperar_mongo()`). | `depends_on` (y `condition: service_healthy`), que no existe en Kubernetes. | `readinessProbe` y `livenessProbe` en reemplazo de `healthcheck`: hoy `Running` no garantiza que MongoDB esté listo para autenticar. |
 | **Configuración y secretos** | El mismo contrato de variables de entorno (incluido `ROOT_PATH=/api` y `SEED_DEMO=true`). | La interpolación local desde el archivo `.env`. | `ConfigMaps` y `Secrets` para sacar configuración y credenciales en texto plano de los manifiestos YAML (Semana 7). |
 | **Persistencia y seguridad** | El diseño sin estado de la API (imágenes almacenadas en MongoDB). | El volumen nombrado `catalogo-db-data` y el bloque `cap_drop` / `cap_add` de Compose. | `PersistentVolumeClaim` (PVC) para que los datos de MongoDB sobrevivan al Pod (Semana 7) y `securityContext` con `capabilities.drop: [ALL]` para mantener mínimo privilegio. |
+
+## Verificación de Endpoints y Selectors (TPI6 - Punto 3)
+
+Mediante `kubectl get endpoints -n catalogo-app` se verificó que los `selector` de los tres Services vinculan correctamente con las `labels` de los Pods desplegados por cada Deployment:
+
+```text
+$ kubectl get endpoints -n catalogo-app
+Warning: v1 Endpoints is deprecated in v1.33+; use discovery.k8s.io/v1 EndpointSlice
+NAME                ENDPOINTS                           AGE
+catalogo-api        10.244.0.49:8000,10.244.0.50:8000   7m6s
+catalogo-db         10.244.0.48:27017                   7m7s
+catalogo-frontend   10.244.0.51:8080,10.244.0.52:8080   7m6s
+```
+
+- **Validación:** Ningún Service presenta `<none>` en la columna `ENDPOINTS`. Las direcciones coinciden con el reparto definido: 1 réplica para `catalogo-db` (`:27017`), 2 para `catalogo-api` (`:8000`) y 2 para `catalogo-frontend` (`:8080`). Si existiera un error de coincidencia entre `selector` y `labels`, el Service se crearía sin arrojar error, pero figuraría vacío (`<none>`).
+- **Advertencia de API:** El mensaje `Warning: v1 Endpoints is deprecated in v1.33+` es el comportamiento esperado, dado que el recurso fue reemplazado por `EndpointSlice`, aunque el comando continúa operando normalmente para diagnóstico.
