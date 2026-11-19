@@ -149,3 +149,14 @@ catalogo-frontend   10.244.0.51:8080,10.244.0.52:8080   7m6s
 
 - **Validación:** Ningún Service presenta `<none>` en la columna `ENDPOINTS`. Las direcciones coinciden con el reparto definido: 1 réplica para `catalogo-db` (`:27017`), 2 para `catalogo-api` (`:8000`) y 2 para `catalogo-frontend` (`:8080`). Si existiera un error de coincidencia entre `selector` y `labels`, el Service se crearía sin arrojar error, pero figuraría vacío (`<none>`).
 - **Advertencia de API:** El mensaje `Warning: v1 Endpoints is deprecated in v1.33+` es el comportamiento esperado, dado que el recurso fue reemplazado por `EndpointSlice`, aunque el comando continúa operando normalmente para diagnóstico.
+
+## Limitación conocida: ausencia de persistencia en `catalogo-db` (TPI 6 - Punto 9)
+
+En esta etapa, el Deployment `catalogo-db` opera sin almacenamiento persistente: todos los datos de MongoDB residen únicamente en el sistema de archivos efímero del contenedor (`/data/db`).
+
+### Comportamiento observado
+1. Al eliminar el Pod de la base de datos (`kubectl delete pod -l app=catalogo-db -n catalogo-app`), el Deployment lo recrea automáticamente con un directorio de datos vacío y el listado de productos queda vacío.
+2. Al reiniciar las réplicas de la API (`kubectl rollout restart deployment/catalogo-api -n catalogo-app`), reaparece el catálogo de demostración porque la siembra idempotente se ejecuta en el arranque de la API; sin embargo, **los productos cargados manualmente con sus imágenes se pierden de forma definitiva**.
+
+### Resolución prevista
+Se deja registrada esta pérdida de datos como una limitación conocida y explícita de la Semana 6 (la reaparición del catálogo demo no demuestra persistencia, sino el efecto de la siembra inicial). Esta deuda se resuelve en la **Semana 7** adjuntando un volumen persistente (`PersistentVolumeClaim`) montado sobre `/data/db`, manteniendo siempre `catalogo-db` en una única réplica.
