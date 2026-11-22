@@ -160,3 +160,12 @@ En esta etapa, el Deployment `catalogo-db` opera sin almacenamiento persistente:
 
 ### Resolución prevista
 Se deja registrada esta pérdida de datos como una limitación conocida y explícita de la Semana 6 (la reaparición del catálogo demo no demuestra persistencia, sino el efecto de la siembra inicial). Esta deuda se resuelve en la **Semana 7** adjuntando un volumen persistente (`PersistentVolumeClaim`) montado sobre `/data/db`, manteniendo siempre `catalogo-db` en una única réplica.
+
+## 5. Decisión de conexión a MongoDB
+
+Se eligió pasar las **piezas de la conexión por separado** (`DB_HOST`, `DB_PORT` y `DB_NAME` desde `catalogo-api-config`; `DB_USER` y `DB_PASSWORD` desde `catalogo-db-secret` vía `valueFrom`) en lugar de una única variable `MONGO_URI`.
+
+**Justificación:**
+- **Separación estricta de datos:** los parámetros no sensibles quedan visibles en el `ConfigMap` y solo las credenciales viven en el `Secret` (con `MONGO_URI`, toda la cadena debería residir dentro del `Secret`).
+- **Sin duplicación de credenciales:** `catalogo-db` y `catalogo-api` consumen las mismas claves de `catalogo-db-secret`, evitando desincronizaciones al rotar la contraseña.
+- **Menor margen de error:** la API arma la cadena e incluye `?authSource=admin` automáticamente, en lugar de depender de redactarlo a mano en el `Secret`.
