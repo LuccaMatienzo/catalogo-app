@@ -224,3 +224,12 @@ El servidor Nginx dentro del contenedor `catalogo-frontend` ya realiza el proxy 
 | 9 | `catalogo-db-secret` | Secret | Almacena usuario y contraseña root de MongoDB consumidos por la base de datos y la API. |
 | 10 | `catalogo-db-pvc` | PersistentVolumeClaim | Solicita `1Gi` `ReadWriteOnce` para persistir `/data/db` ante recreaciones del Pod de MongoDB. |
 | 11 | `catalogo-app-ingress` | Ingress | Enruta el tráfico HTTP de `catalogo.local/` hacia `catalogo-frontend:8080` por el puerto `80`. |
+
+
+## TP8 — Parametrización y ciclo de vida en Helm
+
+### Decisión de conexión a MongoDB en el chart
+Se mantuvo la inyección por **piezas separadas** (`DB_HOST`, `DB_PORT`, `DB_NAME` en `catalogo-api-config` y `DB_USER`, `DB_PASSWORD` referenciados con `valueFrom.secretKeyRef` desde `catalogo-db-secret`). De este modo la API compone la URI agregando `?authSource=admin` automáticamente, se evita duplicar credenciales en el `Secret` y se respeta la separación entre configuración no sensible y datos sensibles.
+
+### Observación sobre `helm upgrade` y ciclos de vida independientes
+Al ejecutar `helm upgrade --reuse-values --set api.image.tag=v2`, únicamente se actualiza el Deployment `catalogo-api` (pasando de `v1` a `v2`), mientras que `catalogo-frontend` permanece sin cambios en `v1`. Ambas capas se empaquetan en imágenes independientes con ciclos de vida desacoplados, por lo que desplegar una nueva versión del backend no reconstruye ni reinicia el frontend.
