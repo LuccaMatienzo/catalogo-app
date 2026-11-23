@@ -199,3 +199,28 @@ Con esta verificación **queda cerrada la limitación de pérdida de datos ante 
 - **Separación estricta de datos:** los parámetros no sensibles quedan visibles en el `ConfigMap` y solo las credenciales viven en el `Secret` (con `MONGO_URI`, toda la cadena debería residir dentro del `Secret`).
 - **Sin duplicación de credenciales:** `catalogo-db` y `catalogo-api` consumen las mismas claves de `catalogo-db-secret`, evitando desincronizaciones al rotar la contraseña.
 - **Menor margen de error:** la API arma la cadena e incluye `?authSource=admin` automáticamente, en lugar de depender de redactarlo a mano en el `Secret`.
+
+## 8. Exposición mediante Ingress (`catalogo-app-ingress`)
+
+### Por qué no se agregó una regla `/api`
+El servidor Nginx dentro del contenedor `catalogo-frontend` ya realiza el proxy inverso de `/api` hacia `catalogo-api:8000`. Duplicar esa regla en el `Ingress` generaría dos fuentes de verdad para la misma decisión de enrutamiento y rompería la paridad con Docker Compose, donde no existe ningún `Ingress`. Por eso `catalogo-app-ingress` define una única regla `/` dirigida a `catalogo-frontend:8080`.
+
+### Diferencia entre `/api/productos` y `/productos`
+- `http://catalogo.local/api/productos` (**verificación válida**): el Nginx del frontend reenvía la petición a `catalogo-api:8000` y devuelve HTTP `200` con `Content-Type: application/json` y la lista de productos.
+- `http://catalogo.local/productos` (**falso positivo silencioso**): por la directiva `try_files` de la SPA, Nginx responde HTTP `200` con `Content-Type: text/html` sirviendo `index.html`, sin consultar a la API.
+
+## 10. Inventario de objetos en `catalogo-app`
+
+| # | Objeto | Tipo | Función |
+|---|---|---|---|
+| 1 | `catalogo-db` | Deployment | Gestiona la réplica de MongoDB 7 con montaje de almacenamiento persistente y credenciales desde `Secret`. |
+| 2 | `catalogo-api` | Deployment | Gestiona las réplicas de la API FastAPI con configuración inyectada desde `ConfigMap` y `Secret`. |
+| 3 | `catalogo-frontend` | Deployment | Gestiona las réplicas de Nginx que sirven la SPA y actúan como proxy inverso hacia la API. |
+| 4 | `catalogo-db` | Service (ClusterIP) | Expone internamente la base de datos por DNS en el puerto `27017`. |
+| 5 | `catalogo-api` | Service (ClusterIP) | Expone y balancea internamente las réplicas de la API en el puerto `8000`. |
+| 6 | `catalogo-frontend` | Service (NodePort) | Expone el frontend en el puerto interno `8080` y en el puerto `30302` del nodo. |
+| 7 | `catalogo-api-config` | ConfigMap | Externaliza las variables de configuración no sensibles de la API (`DB_*`, `ROOT_PATH`, `SEED_DEMO`). |
+| 8 | `catalogo-frontend-config` | ConfigMap | Externaliza el host y puerto de la API (`API_HOST`, `API_PORT`) consumidos por Nginx. |
+| 9 | `catalogo-db-secret` | Secret | Almacena usuario y contraseña root de MongoDB consumidos por la base de datos y la API. |
+| 10 | `catalogo-db-pvc` | PersistentVolumeClaim | Solicita `1Gi` `ReadWriteOnce` para persistir `/data/db` ante recreaciones del Pod de MongoDB. |
+| 11 | `catalogo-app-ingress` | Ingress | Enruta el tráfico HTTP de `catalogo.local/` hacia `catalogo-frontend:8080` por el puerto `80`. |
