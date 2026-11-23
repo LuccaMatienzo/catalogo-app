@@ -1,0 +1,43 @@
+db:
+  image:
+    repository: mongo
+    tag: "7"
+  replicas: 1
+  port: 27017
+  name: catalogodb
+  auth:
+    username: catalogo_user
+    password: catalogo_pass
+  persistence:
+    size: 1Gi
+
+api:
+  image:
+    repository: luccamatienzo/catalogo-api
+    tag: v1
+  replicas: 2
+  port: 8000
+  rootPath: /api
+  seedDemo: "true"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 300m
+      memory: 256Mi
+  hpa:
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 50
+
+frontend:
+  image:
+    repository: luccamatienzo/catalogo-frontend
+    tag: v1
+  replicas: 2
+  port: 8080
+  nodePort: 30302
+
+ingress:
+  host: catalogo.local

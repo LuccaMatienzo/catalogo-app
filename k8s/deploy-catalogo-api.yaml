@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: catalogo-api
+  namespace: catalogo-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: catalogo-api
+  template:
+    metadata:
+      labels:
+        app: catalogo-api
+    spec:
+      containers:
+        - name: catalogo-api
+          image: luccamatienzo/catalogo-api:v1
+          ports:
+            - containerPort: 8000
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "300m"
+              memory: "256Mi"
+          envFrom:
+            - configMapRef:
+                name: catalogo-api-config
+          env:
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: catalogo-db-secret
+                  key: MONGO_INITDB_ROOT_USERNAME
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: catalogo-db-secret
+                  key: MONGO_INITDB_ROOT_PASSWORD
