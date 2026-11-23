@@ -165,6 +165,36 @@ Se deja registrada esta pérdida de datos como una limitación conocida y explí
 
 Se eligió pasar las **piezas de la conexión por separado** (`DB_HOST`, `DB_PORT` y `DB_NAME` desde `catalogo-api-config`; `DB_USER` y `DB_PASSWORD` desde `catalogo-db-secret` vía `valueFrom`) en lugar de una única variable `MONGO_URI`.
 
+## 6. Persistencia con `catalogo-db-pvc`
+
+### Estado del PVC/PV
+
+Estado inmediatamente después de aplicar `k8s/pvc-catalogo-db.yaml`:
+
+```text
+<pegar aquí la salida de kubectl get pvc,pv -n catalogo-app antes de actualizar el Deployment>
+```
+
+Estado tras actualizar `catalogo-db` y recrearse el Pod:
+
+```text
+<pegar aquí la salida de kubectl get pvc,pv -n catalogo-app mostrando el PVC en Bound>
+```
+
+### Diferencia entre motores de base de datos (`subPath`) y permisos de `/data/db`
+
+- **Ausencia de `subPath`:** a diferencia de MySQL, que requiere un directorio de datos completamente vacío para inicializarse (y suele exigir `subPath` para evitar directorios como `lost+found`), MongoDB no impone esa restricción, por lo que el PVC se monta directamente sobre `/data/db` sin `subPath`.
+- **Verificación de propietario y permisos:** si el volumen se montara sin permisos de escritura para el usuario `mongodb` del contenedor, el Pod fallaría con `Permission denied` sobre `/data/db`. Con la `StorageClass` del clúster el directorio se crea con permisos `777`, verificado mediante `kubectl exec deploy/catalogo-db -n catalogo-app -- ls -ld /data/db`:
+
+```text
+<pegar aquí la salida de ls -ld /data/db>
+```
+
+## 7. Comprobación de persistencia y cierre de limitación del TP6
+
+Para evitar el **falso positivo** propio de esta variante —donde el catálogo de demostración reaparece siempre tras recrear la base porque su siembra es idempotente al arrancar la API—, la persistencia se validó cargando manualmente un producto con su imagen desde el navegador, eliminando el Pod de `catalogo-db` y comprobando que tanto el registro como su imagen permanecieron disponibles una vez que el Deployment creó un nuevo Pod reutilizando `catalogo-db-pvc`.
+
+Con esta verificación **queda cerrada la limitación de pérdida de datos ante recreaciones de `catalogo-db` declarada en el TP6**.
 **Justificación:**
 - **Separación estricta de datos:** los parámetros no sensibles quedan visibles en el `ConfigMap` y solo las credenciales viven en el `Secret` (con `MONGO_URI`, toda la cadena debería residir dentro del `Secret`).
 - **Sin duplicación de credenciales:** `catalogo-db` y `catalogo-api` consumen las mismas claves de `catalogo-db-secret`, evitando desincronizaciones al rotar la contraseña.
